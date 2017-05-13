@@ -43,6 +43,7 @@ y_test = np.array([to_categorical(x, num_classes=len(idx2labels)) for x in y_tes
 
 from keras.constraints import maxnorm
 from keras import regularizers
+from keras.layers.merge import Concatenate
 vocab_size = len(idx2words)
 embedding_size = 300
 hidden_size = 128
@@ -51,18 +52,25 @@ intent_size = len(idx2intents)
 
 main_input = Input(shape=(maxlen,), dtype='int32', name='main_input')
 embed = Embedding(vocab_size, embedding_size, input_length=maxlen, mask_zero=True)(main_input)
-lstm = Bidirectional(LSTM(hidden_size, return_sequences=True, kernel_constraint=maxnorm(3.)), merge_mode='concat')(embed)
-slots = TimeDistributed(Dense(slot_size, kernel_constraint=maxnorm(3.), kernel_regularizer=regularizers.l2(0.0001)))(lstm)
-sliced = Lambda(lambda x : x[:, -1, :])(lstm)
-intents = Dense(intent_size, kernel_constraint=maxnorm(3.), kernel_regularizer=regularizers.l2(0.0001))(sliced)
-#intents = TimeDistributed(Dense(intent_size))(lstm)
+tagembed = Input(shape=(maxlen, slot_size), name='tag_input')
+
+merge = Concatenate(axis=-1)([embed, tagembed])
+lstm = Bidirectional(LSTM(hidden_size, return_sequences=True, kernel_constraint=maxnorm(5.)), merge_mode='concat')(embed)
+#lstm = LSTM(hidden_size, return_sequences=True, kernel_constraint=maxnorm(3.))(merge)
+
+slots = TimeDistributed(Dense(slot_size, kernel_constraint=maxnorm(5.), kernel_regularizer=regularizers.l2(0.0001)))(lstm)
 outputslots = Activation('softmax', name='so')(slots)
+
+sliced = Lambda(lambda x : x[:, -1, :])(lstm)
+intents = Dense(intent_size, kernel_constraint=maxnorm(5.), kernel_regularizer=regularizers.l2(0.0001))(sliced)
 outputintents = Activation('softmax', name='io')(intents)
 
-model = Model(inputs=[main_input], outputs = [outputslots, outputintents])
+model = Model(inputs=[main_input], outputs = [outputslots])
+#model2 = Model(inputs=[main_input, tagembed], outputs = [outputintents])
 
 print "compiling"
-model.compile(loss='categorical_crossentropy', optimizer='adam', loss_weights=[0.6, 0.4], metrics={'io' : 'accuracy'})
+model.compile(loss='categorical_crossentropy', optimizer='adam')
+#model2.compile(loss='categorical_crossentropy', optimizer='adam', metrics={'io' : 'accuracy'})
 
 batch_size = 32
 
@@ -83,11 +91,14 @@ testAct = [map(lambda x: idx2labels[x], y) for y in testY]
 
 def predict_classes(x) :
     pred = model.predict(x)
-    return pred[0].argmax(axis=-1)
+    return pred.argmax(axis=-1)
 
 while(True) :
-    model.fit([X_train], [y_train, l_train], batch_size=batch_size, nb_epoch=1, validation_data=([X_valid], [y_valid, l_valid]))
+    model.fit([X_train], [y_train], batch_size=batch_size, nb_epoch=1, validation_data=([X_valid], [y_valid]))
     validPred = [map(lambda x: idx2labels[x], remove_padding(c, d)) for c, d in zip(predict_classes([X_valid]), X_valid)]
     print conlleval(validPred, validAct, wordsValid, 'output/current.valid.txt')
     testPred = [map(lambda x: idx2labels[x], remove_padding(c, d)) for c, d in zip(predict_classes([X_test]), X_test)]
     print conlleval(testPred, testAct, wordsTest, 'output/current.test.txt')
+
+# while(True) :
+#     model2.fit([X_train, y_train], [l_train], batch_size=batch_size, nb_epoch=1, validation_data=([X_valid, y_valid], [l_valid]))

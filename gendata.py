@@ -11,6 +11,7 @@ def gendata() :
             if 'labels' not in e :
                 fp = [x.split(' ') for x in fp]
                 fp = [[int(a) for a in x] for x in fp]
+                fp = [x[1:] for x in fp]
             else :
                 fp = [int(x) for x in fp]
             output[n].append(fp)
