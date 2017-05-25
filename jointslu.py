@@ -156,7 +156,7 @@ if __name__ == "__main__" :
 
 import record
 print "Loading Model ... "
-#import script1
+import script1
 print "DT Parser loaded"
 model_intent = load_model(output_dir + 'model_intent_1.ckpt', custom_objects={'acc_2':acc_2})#
 model_slots = load_model(output_dir + 'model_slots_1.ckpt')
